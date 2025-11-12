@@ -5,9 +5,11 @@ import { BottomNav } from "@/components/BottomNav";
 import { MapView } from "@/components/MapView";
 import { Checklist } from "@/components/Checklist";
 import { EmergencyContacts } from "@/components/EmergencyContacts";
+import { NotificationDrawer } from "@/components/NotificationDrawer";
 import { Alert } from "@/types/alert";
 import { AlertCircle, Bell } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 // Sample alert data
 const sampleAlerts: Alert[] = [
@@ -84,6 +86,7 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState('alerts');
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [alerts] = useState<Alert[]>(sampleAlerts);
+  const [notificationDrawerOpen, setNotificationDrawerOpen] = useState(false);
 
   if (selectedAlert) {
     return <AlertDetails alert={selectedAlert} onBack={() => setSelectedAlert(null)} />;
@@ -106,17 +109,22 @@ const Index = () => {
                 <p className="text-xs text-muted-foreground">Emergency Alert System</p>
               </div>
             </div>
-            <div className="relative">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative"
+              onClick={() => setNotificationDrawerOpen(true)}
+            >
               <Bell className="w-6 h-6 text-foreground" />
               {criticalCount > 0 && (
                 <Badge 
                   variant="destructive" 
-                  className="absolute -top-2 -right-2 w-5 h-5 p-0 flex items-center justify-center text-xs"
+                  className="absolute -top-1 -right-1 w-5 h-5 p-0 flex items-center justify-center text-xs animate-pulse"
                 >
                   {criticalCount}
                 </Badge>
               )}
-            </div>
+            </Button>
           </div>
         </div>
       </header>
@@ -158,6 +166,14 @@ const Index = () => {
 
       {/* Bottom Navigation */}
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+
+      {/* Notification Drawer */}
+      <NotificationDrawer
+        isOpen={notificationDrawerOpen}
+        onClose={() => setNotificationDrawerOpen(false)}
+        alerts={alerts}
+        onAlertClick={setSelectedAlert}
+      />
     </div>
   );
 };
