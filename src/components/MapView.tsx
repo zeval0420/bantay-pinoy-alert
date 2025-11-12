@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,78 +65,98 @@ const dangerZone = {
 };
 
 // Leaflet Map Component
-const LeafletMap = () => {
+const LeafletMap = ({ selectedRoute }: { selectedRoute: string | null }) => {
+  const mapRef = useRef<any>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const routeLayers = useRef<any>({});
 
   useEffect(() => {
-    // Dynamically import Leaflet to avoid SSR issues
-    import('leaflet').then((L) => {
-      // Fix default marker icon issue
-      delete (L.Icon.Default.prototype as any)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-        iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-      });
+    let mapInstance: any = null;
 
-      // Import CSS
-      import('leaflet/dist/leaflet.css').then(() => {
+    // Dynamically import Leaflet
+    const initMap = async () => {
+      try {
+        const L = await import('leaflet');
+        await import('leaflet/dist/leaflet.css');
+
+        // Fix default marker icon issue
+        delete (L.Icon.Default.prototype as any)._getIconUrl;
+        L.Icon.Default.mergeOptions({
+          iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+          iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+        });
+
+        // Create map
+        mapInstance = L.map('map').setView(VIGAN_CENTER, 13);
+        mapRef.current = mapInstance;
+
+        // Add tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(mapInstance);
+
+        // Add danger zone circle
+        L.circle(dangerZone.center, {
+          color: '#DC2626',
+          fillColor: '#DC2626',
+          fillOpacity: 0.2,
+          radius: dangerZone.radius
+        }).addTo(mapInstance).bindPopup('<div class="text-sm"><p class="font-bold">Danger Zone</p><p>Flooding reported in this area</p></div>');
+
+        // Add safe zone markers
+        safeZones.forEach((zone) => {
+          L.marker(zone.position)
+            .addTo(mapInstance)
+            .bindPopup(`<div class="text-sm"><p class="font-bold">${zone.name}</p><p class="text-xs">Safe Zone - ${zone.distance}</p></div>`);
+        });
+
+        // Add evacuation routes
+        evacuationRoutes.forEach((route) => {
+          const polyline = L.polyline(route.coordinates, {
+            color: route.color,
+            weight: 4,
+            opacity: 0.7
+          }).addTo(mapInstance);
+          
+          polyline.bindPopup(`<div class="text-sm"><p class="font-bold">${route.name}</p><p class="text-xs">${route.description}</p></div>`);
+          
+          // Store polyline reference
+          routeLayers.current[route.id] = { polyline, defaultColor: route.color };
+        });
+
         setMapLoaded(true);
-      });
-    });
-  }, []);
+      } catch (error) {
+        console.error('Error loading map:', error);
+      }
+    };
 
-  useEffect(() => {
-    if (!mapLoaded) return;
-
-    const L = require('leaflet');
-    
-    // Create map
-    const map = L.map('map').setView(VIGAN_CENTER, 13);
-
-    // Add tile layer
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(map);
-
-    // Add danger zone circle
-    L.circle(dangerZone.center, {
-      color: '#DC2626',
-      fillColor: '#DC2626',
-      fillOpacity: 0.2,
-      radius: dangerZone.radius
-    }).addTo(map).bindPopup('<div class="text-sm"><p class="font-bold">Danger Zone</p><p>Flooding reported in this area</p></div>');
-
-    // Add safe zone markers
-    safeZones.forEach((zone) => {
-      L.marker(zone.position)
-        .addTo(map)
-        .bindPopup(`<div class="text-sm"><p class="font-bold">${zone.name}</p><p class="text-xs">Safe Zone - ${zone.distance}</p></div>`);
-    });
-
-    // Add evacuation routes
-    evacuationRoutes.forEach((route) => {
-      const polyline = L.polyline(route.coordinates, {
-        color: route.color,
-        weight: 4,
-        opacity: 0.7
-      }).addTo(map);
-      
-      polyline.bindPopup(`<div class="text-sm"><p class="font-bold">${route.name}</p><p class="text-xs">${route.description}</p></div>`);
-      
-      // Store polyline for later highlighting
-      (polyline as any).routeId = route.id;
-    });
+    initMap();
 
     // Cleanup
     return () => {
-      map.remove();
+      if (mapInstance) {
+        mapInstance.remove();
+      }
     };
-  }, [mapLoaded]);
+  }, []);
+
+  // Handle route highlighting
+  useEffect(() => {
+    if (!mapLoaded) return;
+
+    Object.entries(routeLayers.current).forEach(([routeId, layer]: [string, any]) => {
+      if (routeId === selectedRoute) {
+        layer.polyline.setStyle({ color: '#F59E0B', weight: 6, opacity: 1 });
+      } else {
+        layer.polyline.setStyle({ color: layer.defaultColor, weight: 4, opacity: 0.7 });
+      }
+    });
+  }, [selectedRoute, mapLoaded]);
 
   if (!mapLoaded) {
     return (
-      <div className="h-full w-full bg-muted flex items-center justify-center">
+      <div className="h-full w-full bg-muted flex items-center justify-center animate-pulse">
         <p className="text-muted-foreground">Loading map...</p>
       </div>
     );
@@ -150,33 +170,12 @@ export const MapView = () => {
 
   const handleRouteClick = (routeId: string) => {
     setSelectedRoute(selectedRoute === routeId ? null : routeId);
-    
-    // Highlight route on map
-    if (typeof window !== 'undefined' && (window as any).L) {
-      const L = (window as any).L;
-      const map = (document.getElementById('map') as any)?._leaflet_map;
-      
-      if (map) {
-        map.eachLayer((layer: any) => {
-          if (layer.routeId) {
-            if (layer.routeId === routeId && selectedRoute !== routeId) {
-              layer.setStyle({ color: '#F59E0B', weight: 6, opacity: 1 });
-            } else {
-              const route = evacuationRoutes.find(r => r.id === layer.routeId);
-              if (route) {
-                layer.setStyle({ color: route.color, weight: 4, opacity: 0.7 });
-              }
-            }
-          }
-        });
-      }
-    }
   };
 
   return (
     <div className="space-y-4">
       <div className="relative h-[400px] rounded-lg overflow-hidden border-2 border-border shadow-lg">
-        <LeafletMap />
+        <LeafletMap selectedRoute={selectedRoute} />
       </div>
 
       <Card className="p-4">
