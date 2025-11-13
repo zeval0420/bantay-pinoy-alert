@@ -19,11 +19,11 @@ import { useNavigate } from "react-router-dom";
 const sampleAlerts: Alert[] = [
   {
     id: '1',
-    title: 'Typhoon Nina Approaching Metro Manila',
+    title: 'Typhoon Uwan Approaching Metro Manila',
     severity: 'critical',
     type: 'typhoon',
     description: 'Super Typhoon Uwan is expected to make landfall in Metro Manila within 12 hours. Wind speeds reaching 220 km/h with heavy rainfall expected.',
-    location: 'Metro Manila, NCR',
+    location: 'Urdaneta City, Pangasinan',
     time: new Date(),
     safeZones: ['Quezon City Hall Evacuation Center', 'Marikina Sports Complex', 'Manila City Gym'],
     instructions: [
@@ -37,11 +37,11 @@ const sampleAlerts: Alert[] = [
   },
   {
     id: '2',
-    title: 'Earthquake Warning - Magnitude 5.8',
+    title: 'Earthquake Warning - Magnitude 4.7',
     severity: 'warning',
     type: 'earthquake',
     description: 'A moderate earthquake has been detected. Aftershocks expected in the next 24-48 hours.',
-    location: 'Batangas Province',
+    location: 'Candon City, Ilocos Sur',
     time: new Date(Date.now() - 3600000),
     safeZones: ['Open fields near City Center', 'Provincial Gymnasium'],
     instructions: [
