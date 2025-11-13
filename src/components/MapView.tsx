@@ -28,18 +28,16 @@ const safeZones = [
   { name: "Bantay Church", position: [17.5920, 120.3890] as [number, number], distance: "2.8 km" },
 ];
 
-// Evacuation routes
-const evacuationRoutes = [
+// Evacuation route definitions (waypoints)
+const evacuationRouteWaypoints = [
   {
     id: "route-a",
     name: "Coastal Highway Route",
     status: "clear",
     description: "Clear - Recommended",
-    coordinates: [
+    waypoints: [
       [17.5747, 120.3869] as [number, number],
-      [17.5800, 120.3900] as [number, number],
-      [17.5850, 120.3950] as [number, number],
-      [17.5920, 120.3890] as [number, number],
+      [17.5920, 120.3890] as [number, number], // Bantay Church
     ],
     color: "#10B981",
   },
@@ -48,11 +46,9 @@ const evacuationRoutes = [
     name: "Heritage Village Route",
     status: "clear",
     description: "Clear - Alternative route",
-    coordinates: [
+    waypoints: [
       [17.5747, 120.3869] as [number, number],
-      [17.5750, 120.3850] as [number, number],
-      [17.5780, 120.3820] as [number, number],
-      [17.5741, 120.3868] as [number, number],
+      [17.5741, 120.3868] as [number, number], // Vigan City Hall
     ],
     color: "#10B981",
   },
@@ -61,10 +57,8 @@ const evacuationRoutes = [
     name: "River Road",
     status: "closed",
     description: "Closed - Flooding reported",
-    coordinates: [
+    waypoints: [
       [17.5747, 120.3869] as [number, number],
-      [17.5700, 120.3850] as [number, number],
-      [17.5650, 120.3830] as [number, number],
       [17.5600, 120.3810] as [number, number],
     ],
     color: "#DC2626",
@@ -75,6 +69,28 @@ const evacuationRoutes = [
 const dangerZone = {
   center: [17.5600, 120.3810] as [number, number],
   radius: 2000, // meters
+};
+
+// Helper function to fetch route from OSRM
+const fetchRoute = async (waypoints: [number, number][]) => {
+  try {
+    // Format: longitude,latitude;longitude,latitude
+    const coords = waypoints.map(([lat, lng]) => `${lng},${lat}`).join(';');
+    const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.code === 'Ok' && data.routes && data.routes[0]) {
+      // Convert GeoJSON coordinates [lng, lat] to Leaflet format [lat, lng]
+      return data.routes[0].geometry.coordinates.map(([lng, lat]: [number, number]) => [lat, lng] as [number, number]);
+    }
+    
+    return waypoints; // Fallback to straight line if routing fails
+  } catch (error) {
+    console.error('Error fetching route:', error);
+    return waypoints; // Fallback to straight line
+  }
 };
 
 // Leaflet Map Component
@@ -131,9 +147,11 @@ const LeafletMap = ({
             .bindPopup(`<div class="text-sm"><p class="font-bold">${zone.name}</p><p class="text-xs">Safe Zone - ${zone.distance}</p></div>`);
         });
 
-        // Add evacuation routes
-        evacuationRoutes.forEach((route) => {
-          const polyline = L.polyline(route.coordinates, {
+        // Add evacuation routes with real road-based routing
+        const routePromises = evacuationRouteWaypoints.map(async (route) => {
+          const roadCoordinates = await fetchRoute(route.waypoints);
+          
+          const polyline = L.polyline(roadCoordinates, {
             color: route.color,
             weight: 4,
             opacity: 0.7
@@ -144,6 +162,8 @@ const LeafletMap = ({
           // Store polyline reference
           routeLayers.current[route.id] = { polyline, defaultColor: route.color };
         });
+
+        await Promise.all(routePromises);
 
         // Add hazard report markers
         hazardReports.forEach((report) => {
@@ -329,7 +349,7 @@ export const MapView = () => {
           Click on a route to highlight it on the map
         </p>
         <div className="space-y-2">
-          {evacuationRoutes.map((route) => (
+          {evacuationRouteWaypoints.map((route) => (
             <Button
               key={route.id}
               variant={selectedRoute === route.id ? "default" : "outline"}
