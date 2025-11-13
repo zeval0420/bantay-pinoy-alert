@@ -14,67 +14,67 @@ const authSchema = z.object({
 });
 
 const Auth = () => {
-  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Redirect if already logged in
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Check if already logged in
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session) {
-        navigate('/');
+        // Check if user is admin
+        const { data } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', session.user.id)
+          .eq('role', 'admin')
+          .single();
+        
+        if (data) {
+          navigate('/admin');
+        } else {
+          navigate('/');
+        }
       }
     });
   }, [navigate]);
 
-  const handleAuth = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
       const validated = authSchema.parse({ email, password });
       setLoading(true);
 
-      if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: validated.email,
-          password: validated.password,
-        });
+      const { error, data } = await supabase.auth.signInWithPassword({
+        email: validated.email,
+        password: validated.password,
+      });
 
-        if (error) {
-          if (error.message.includes("Invalid login credentials")) {
-            toast.error("Invalid email or password");
-          } else {
-            toast.error(error.message);
-          }
-          return;
+      if (error) {
+        if (error.message.includes("Invalid login credentials")) {
+          toast.error("Invalid email or password");
+        } else {
+          toast.error(error.message);
         }
+        return;
+      }
 
-        toast.success("Successfully logged in!");
-        navigate("/");
+      // Check if user is admin
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', data.user.id)
+        .eq('role', 'admin')
+        .single();
+
+      if (roleData) {
+        toast.success("Admin login successful!");
+        navigate('/admin');
       } else {
-        const redirectUrl = `${window.location.origin}/`;
-        
-        const { error } = await supabase.auth.signUp({
-          email: validated.email,
-          password: validated.password,
-          options: {
-            emailRedirectTo: redirectUrl,
-          },
-        });
-
-        if (error) {
-          if (error.message.includes("already registered")) {
-            toast.error("This email is already registered. Please login instead.");
-          } else {
-            toast.error(error.message);
-          }
-          return;
-        }
-
-        toast.success("Account created! You can now login.");
-        setIsLogin(true);
+        toast.error("Access denied. Admin credentials required.");
+        await supabase.auth.signOut();
       }
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -91,15 +91,13 @@ const Auth = () => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-orange-50 p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>{isLogin ? "Login" : "Sign Up"}</CardTitle>
+          <CardTitle>Admin Login</CardTitle>
           <CardDescription>
-            {isLogin
-              ? "Enter your credentials to access the emergency alert system"
-              : "Create an account to report hazards and receive alerts"}
+            Enter your admin credentials to access the management dashboard
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleAuth} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -126,17 +124,15 @@ const Auth = () => {
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Loading..." : isLogin ? "Login" : "Sign Up"}
+              {loading ? "Loading..." : "Login as Admin"}
             </Button>
             <Button
               type="button"
               variant="link"
               className="w-full"
-              onClick={() => setIsLogin(!isLogin)}
+              onClick={() => navigate('/')}
             >
-              {isLogin
-                ? "Don't have an account? Sign up"
-                : "Already have an account? Login"}
+              Back to Public Site
             </Button>
           </form>
         </CardContent>

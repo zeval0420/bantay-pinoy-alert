@@ -112,13 +112,6 @@ export const HazardReport = () => {
 
   const handleSubmit = async () => {
     try {
-      // Get authenticated user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error('You must be logged in to submit a report');
-        return;
-      }
-
       // Validate form data
       const validated = hazardReportSchema.parse({
         hazard_type: hazardType,
@@ -135,9 +128,15 @@ export const HazardReport = () => {
 
       setSubmitting(true);
 
-      // Upload image to storage with user folder
+      // Get current user (optional for anonymous reports)
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Upload image to storage
       const fileExt = imageFile.name.split('.').pop();
-      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+      const fileName = user 
+        ? `${user.id}/${Date.now()}.${fileExt}`
+        : `anonymous/${Date.now()}.${fileExt}`;
+      
       const { error: uploadError } = await supabase.storage
         .from('hazard-images')
         .upload(fileName, imageFile);
@@ -149,11 +148,11 @@ export const HazardReport = () => {
         .from('hazard-images')
         .getPublicUrl(fileName);
 
-      // Insert hazard report with validated data and user_id
+      // Insert hazard report with validated data and optional user_id
       const { error: insertError } = await supabase
         .from('hazard_reports')
         .insert({
-          user_id: user.id,
+          user_id: user?.id || null,
           image_url: publicUrl,
           hazard_type: validated.hazard_type,
           description: validated.description,

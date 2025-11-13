@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { AlertCard } from "@/components/AlertCard";
 import { AlertDetails } from "@/components/AlertDetails";
 import { BottomNav } from "@/components/BottomNav";
@@ -9,11 +8,12 @@ import { EmergencyContacts } from "@/components/EmergencyContacts";
 import { NotificationDrawer } from "@/components/NotificationDrawer";
 import { HazardReport } from "@/components/HazardReport";
 import { Alert } from "@/types/alert";
-import { AlertCircle, Bell, LogOut } from "lucide-react";
+import { AlertCircle, Bell, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import type { Session } from "@supabase/supabase-js";
+import { useNavigate } from "react-router-dom";
 
 // Sample alert data
 const sampleAlerts: Alert[] = [
@@ -92,47 +92,41 @@ const Index = () => {
   const [alerts] = useState<Alert[]>(sampleAlerts);
   const [notificationDrawerOpen, setNotificationDrawerOpen] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check initial session
+    // Check session and admin status
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (!session) {
-        navigate('/auth');
+      if (session) {
+        checkAdminStatus(session.user.id);
       }
-      setLoading(false);
     });
 
     // Listen to auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (!session) {
-        navigate('/auth');
+      if (session) {
+        checkAdminStatus(session.user.id);
+      } else {
+        setIsAdmin(false);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, []);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate('/auth');
+  const checkAdminStatus = async (userId: string) => {
+    const { data } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .eq('role', 'admin')
+      .single();
+    
+    setIsAdmin(!!data);
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!session) return null;
 
   if (selectedAlert) {
     return <AlertDetails alert={selectedAlert} onBack={() => setSelectedAlert(null)} />;
@@ -172,14 +166,26 @@ const Index = () => {
                   </Badge>
                 )}
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleLogout}
-                title="Logout"
-              >
-                <LogOut className="w-5 h-5 text-foreground" />
-              </Button>
+              {isAdmin ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate('/admin')}
+                  className="flex items-center gap-1"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span className="text-xs">Admin</span>
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate('/auth')}
+                  className="text-xs"
+                >
+                  Admin Login
+                </Button>
+              )}
             </div>
           </div>
         </div>
