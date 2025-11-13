@@ -8,12 +8,14 @@ import { EmergencyContacts } from "@/components/EmergencyContacts";
 import { NotificationDrawer } from "@/components/NotificationDrawer";
 import { HazardReport } from "@/components/HazardReport";
 import { Alert } from "@/types/alert";
-import { AlertCircle, Bell, ShieldCheck } from "lucide-react";
+import { Bell, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import type { Session } from "@supabase/supabase-js";
 import { useNavigate } from "react-router-dom";
+
+import MyAlertIcon from "@/@/public/my-alert-icon.svg?react";
 
 // Sample alert data
 const sampleAlerts: Alert[] = [
@@ -142,7 +144,7 @@ const Index = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="p-2 bg-primary rounded-lg">
-                <AlertCircle className="w-6 h-6 text-primary-foreground" />
+                <MyAlertIcon className="w-6 h-6 text-primary-foreground" />
               </div>
               <div>
                 <h1 className="text-xl font-bold text-foreground">SentinelPH</h1>
