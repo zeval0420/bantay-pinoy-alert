@@ -223,8 +223,13 @@ const LeafletMap = ({
 
     Object.entries(routeLayers.current).forEach(([routeId, layer]: [string, any]) => {
       if (routeId === selectedRoute) {
+        // Highlight selected route in amber
         layer.polyline.setStyle({ color: '#F59E0B', weight: 6, opacity: 1 });
+      } else if (selectedRoute) {
+        // Gray out non-selected routes when a route is selected
+        layer.polyline.setStyle({ color: '#9CA3AF', weight: 3, opacity: 0.4 });
       } else {
+        // Show default colors when no route is selected
         layer.polyline.setStyle({ color: layer.defaultColor, weight: 4, opacity: 0.7 });
       }
     });
