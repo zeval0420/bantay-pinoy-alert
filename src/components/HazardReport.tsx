@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Camera, MapPin, Upload, Loader2, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { hazardReportSchema, imageFileSchema } from "@/lib/validation";
+import { z } from "zod";
 
 export const HazardReport = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -21,15 +23,29 @@ export const HazardReport = () => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageSelect = async (file: File) => {
-    setImageFile(file);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setSelectedImage(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    try {
+      // Validate image file
+      imageFileSchema.parse({
+        type: file.type,
+        size: file.size
+      });
 
-    // Auto-analyze the image
-    await analyzeImage(file);
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+
+      // Auto-analyze the image
+      await analyzeImage(file);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast.error(error.errors[0].message);
+      } else {
+        toast.error("Invalid image file");
+      }
+    }
   };
 
   const analyzeImage = async (file: File) => {
@@ -95,16 +111,33 @@ export const HazardReport = () => {
   };
 
   const handleSubmit = async () => {
-    if (!imageFile || !hazardType || !description || !location.lat) {
-      toast.error("Please complete all fields before submitting");
-      return;
-    }
-
-    setSubmitting(true);
     try {
-      // Upload image to storage
+      // Get authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error('You must be logged in to submit a report');
+        return;
+      }
+
+      // Validate form data
+      const validated = hazardReportSchema.parse({
+        hazard_type: hazardType,
+        description: description,
+        latitude: location.lat,
+        longitude: location.lng,
+        location_name: location.name || undefined,
+      });
+
+      if (!imageFile) {
+        toast.error("Please select an image");
+        return;
+      }
+
+      setSubmitting(true);
+
+      // Upload image to storage with user folder
       const fileExt = imageFile.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
       const { error: uploadError } = await supabase.storage
         .from('hazard-images')
         .upload(fileName, imageFile);
@@ -116,16 +149,17 @@ export const HazardReport = () => {
         .from('hazard-images')
         .getPublicUrl(fileName);
 
-      // Insert hazard report
+      // Insert hazard report with validated data and user_id
       const { error: insertError } = await supabase
         .from('hazard_reports')
         .insert({
+          user_id: user.id,
           image_url: publicUrl,
-          hazard_type: hazardType,
-          description: description,
-          latitude: location.lat,
-          longitude: location.lng,
-          location_name: location.name,
+          hazard_type: validated.hazard_type,
+          description: validated.description,
+          latitude: validated.latitude,
+          longitude: validated.longitude,
+          location_name: validated.location_name,
         });
 
       if (insertError) throw insertError;
@@ -139,8 +173,12 @@ export const HazardReport = () => {
       setDescription("");
       setLocation({ lat: 0, lng: 0, name: "" });
     } catch (error) {
-      console.error("Error submitting report:", error);
-      toast.error("Failed to submit report. Please try again.");
+      if (error instanceof z.ZodError) {
+        toast.error(error.errors[0].message);
+      } else {
+        console.error("Error submitting report:", error);
+        toast.error("Failed to submit report. Please try again.");
+      }
     } finally {
       setSubmitting(false);
     }

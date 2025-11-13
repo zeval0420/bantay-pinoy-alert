@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { AlertCard } from "@/components/AlertCard";
 import { AlertDetails } from "@/components/AlertDetails";
 import { BottomNav } from "@/components/BottomNav";
@@ -8,9 +9,11 @@ import { EmergencyContacts } from "@/components/EmergencyContacts";
 import { NotificationDrawer } from "@/components/NotificationDrawer";
 import { HazardReport } from "@/components/HazardReport";
 import { Alert } from "@/types/alert";
-import { AlertCircle, Bell } from "lucide-react";
+import { AlertCircle, Bell, LogOut } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import type { Session } from "@supabase/supabase-js";
 
 // Sample alert data
 const sampleAlerts: Alert[] = [
@@ -88,6 +91,48 @@ const Index = () => {
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [alerts] = useState<Alert[]>(sampleAlerts);
   const [notificationDrawerOpen, setNotificationDrawerOpen] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (!session) {
+        navigate('/auth');
+      }
+      setLoading(false);
+    });
+
+    // Listen to auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (!session) {
+        navigate('/auth');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/auth');
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) return null;
 
   if (selectedAlert) {
     return <AlertDetails alert={selectedAlert} onBack={() => setSelectedAlert(null)} />;
@@ -110,22 +155,32 @@ const Index = () => {
                 <p className="text-xs text-muted-foreground">Emergency Alert System</p>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="relative"
-              onClick={() => setNotificationDrawerOpen(true)}
-            >
-              <Bell className="w-6 h-6 text-foreground" />
-              {criticalCount > 0 && (
-                <Badge 
-                  variant="destructive" 
-                  className="absolute -top-1 -right-1 w-5 h-5 p-0 flex items-center justify-center text-xs animate-pulse"
-                >
-                  {criticalCount}
-                </Badge>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative"
+                onClick={() => setNotificationDrawerOpen(true)}
+              >
+                <Bell className="w-6 h-6 text-foreground" />
+                {criticalCount > 0 && (
+                  <Badge 
+                    variant="destructive" 
+                    className="absolute -top-1 -right-1 w-5 h-5 p-0 flex items-center justify-center text-xs animate-pulse"
+                  >
+                    {criticalCount}
+                  </Badge>
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleLogout}
+                title="Logout"
+              >
+                <LogOut className="w-5 h-5 text-foreground" />
+              </Button>
+            </div>
           </div>
         </div>
       </header>
