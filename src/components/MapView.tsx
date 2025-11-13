@@ -4,6 +4,19 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MapPin, Navigation, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+
+interface HazardReport {
+  id: string;
+  hazard_type: string;
+  description: string;
+  latitude: number;
+  longitude: number;
+  location_name: string | null;
+  created_at: string;
+  status: string;
+}
 
 // Vigan, Ilocos Sur coordinates
 const VIGAN_CENTER: [number, number] = [17.5747, 120.3869];
@@ -65,10 +78,17 @@ const dangerZone = {
 };
 
 // Leaflet Map Component
-const LeafletMap = ({ selectedRoute }: { selectedRoute: string | null }) => {
+const LeafletMap = ({ 
+  selectedRoute,
+  hazardReports 
+}: { 
+  selectedRoute: string | null;
+  hazardReports: HazardReport[];
+}) => {
   const mapRef = useRef<any>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const routeLayers = useRef<any>({});
+  const hazardMarkers = useRef<any[]>([]);
 
   useEffect(() => {
     let mapInstance: any = null;
@@ -125,6 +145,38 @@ const LeafletMap = ({ selectedRoute }: { selectedRoute: string | null }) => {
           routeLayers.current[route.id] = { polyline, defaultColor: route.color };
         });
 
+        // Add hazard report markers
+        hazardReports.forEach((report) => {
+          const hazardIcon = L.divIcon({
+            className: 'custom-hazard-icon',
+            html: `<div style="background-color: #DC2626; color: white; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">!</div>`,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16],
+          });
+
+          const marker = L.marker([report.latitude, report.longitude], { icon: hazardIcon })
+            .addTo(mapInstance)
+            .bindPopup(`
+              <div class="text-sm max-w-xs">
+                <p class="font-bold text-base mb-1">${report.hazard_type}</p>
+                <p class="text-xs text-gray-600 mb-2">${report.description}</p>
+                <p class="text-xs text-gray-500 mb-1">
+                  <strong>Location:</strong> ${report.location_name || 'Unknown'}
+                </p>
+                <p class="text-xs text-gray-500">
+                  <strong>Reported:</strong> ${new Date(report.created_at).toLocaleString()}
+                </p>
+                <span class="inline-block mt-2 px-2 py-1 text-xs rounded ${
+                  report.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                  report.status === 'verified' ? 'bg-green-100 text-green-800' :
+                  'bg-gray-100 text-gray-800'
+                }">${report.status}</span>
+              </div>
+            `);
+
+          hazardMarkers.current.push(marker);
+        });
+
         setMapLoaded(true);
       } catch (error) {
         console.error('Error loading map:', error);
@@ -135,11 +187,15 @@ const LeafletMap = ({ selectedRoute }: { selectedRoute: string | null }) => {
 
     // Cleanup
     return () => {
+      // Remove hazard markers
+      hazardMarkers.current.forEach(marker => marker.remove());
+      hazardMarkers.current = [];
+      
       if (mapInstance) {
         mapInstance.remove();
       }
     };
-  }, []);
+  }, [hazardReports]);
 
   // Handle route highlighting
   useEffect(() => {
@@ -167,6 +223,51 @@ const LeafletMap = ({ selectedRoute }: { selectedRoute: string | null }) => {
 
 export const MapView = () => {
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
+  const [hazardReports, setHazardReports] = useState<HazardReport[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch hazard reports
+  useEffect(() => {
+    fetchHazardReports();
+
+    // Set up realtime subscription
+    const channel = supabase
+      .channel('hazard-reports-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'hazard_reports'
+        },
+        () => {
+          fetchHazardReports();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const fetchHazardReports = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('hazard_reports')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setHazardReports(data || []);
+    } catch (error) {
+      console.error('Error fetching hazard reports:', error);
+      toast.error('Failed to load hazard reports');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRouteClick = (routeId: string) => {
     setSelectedRoute(selectedRoute === routeId ? null : routeId);
@@ -174,9 +275,40 @@ export const MapView = () => {
 
   return (
     <div className="space-y-4">
-      <div className="relative h-[400px] rounded-lg overflow-hidden border-2 border-border shadow-lg">
-        <LeafletMap selectedRoute={selectedRoute} />
-      </div>
+      {loading ? (
+        <Card className="p-8">
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <span className="ml-3 text-muted-foreground">Loading map...</span>
+          </div>
+        </Card>
+      ) : (
+        <>
+          <div className="relative h-[400px] rounded-lg overflow-hidden border-2 border-border shadow-lg">
+            <LeafletMap selectedRoute={selectedRoute} hazardReports={hazardReports} />
+          </div>
+
+          {hazardReports.length > 0 && (
+            <Card className="p-4 bg-warning/5 border-warning/20">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="w-5 h-5 text-warning" />
+                <h3 className="font-bold text-foreground">Reported Hazards</h3>
+              </div>
+              <p className="text-sm text-foreground/80 mb-2">
+                {hazardReports.length} hazard{hazardReports.length !== 1 ? 's' : ''} reported in the area
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {Array.from(new Set(hazardReports.map(r => r.hazard_type))).map((type) => (
+                  <Badge key={type} variant="outline" className="text-xs">
+                    {type} ({hazardReports.filter(r => r.hazard_type === type).length})
+                  </Badge>
+                ))}
+              </div>
+            </Card>
+          )}
+        </>
+      )}
+
 
       <Card className="p-4">
         <div className="flex items-center gap-2 mb-3">
