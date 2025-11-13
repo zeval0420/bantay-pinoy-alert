@@ -210,15 +210,16 @@ const LeafletMap = ({
     });
   }, [selectedRoute, mapLoaded]);
 
-  if (!mapLoaded) {
-    return (
-      <div className="h-full w-full bg-muted flex items-center justify-center animate-pulse">
-        <p className="text-muted-foreground">Loading map...</p>
-      </div>
-    );
-  }
-
-  return <div id="map" className="h-full w-full" />;
+  return (
+    <>
+      {!mapLoaded && (
+        <div className="absolute inset-0 bg-muted flex items-center justify-center z-10 animate-pulse">
+          <p className="text-muted-foreground">Loading map...</p>
+        </div>
+      )}
+      <div id="map" className="h-full w-full" />
+    </>
+  );
 };
 
 export const MapView = () => {
@@ -289,22 +290,31 @@ export const MapView = () => {
           </div>
 
           {hazardReports.length > 0 && (
-            <Card className="p-4 bg-warning/5 border-warning/20">
-              <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle className="w-5 h-5 text-warning" />
-                <h3 className="font-bold text-foreground">Reported Hazards</h3>
+            <div className="bg-gradient-to-r from-warning/20 via-warning/10 to-warning/20 border-l-4 border-warning rounded-lg p-4 shadow-lg">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 mt-0.5">
+                  <AlertTriangle className="w-6 h-6 text-warning animate-pulse" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-bold text-foreground text-lg mb-1">
+                    ⚠️ Community Hazard Alerts
+                  </h3>
+                  <p className="text-sm text-foreground/90 mb-3">
+                    <strong>{hazardReports.length}</strong> hazard{hazardReports.length !== 1 ? 's have' : ' has'} been reported by community members in this area
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {Array.from(new Set(hazardReports.map(r => r.hazard_type))).map((type) => (
+                      <Badge key={type} className="bg-warning/20 text-warning-foreground border-warning/30 font-semibold">
+                        {type} ({hazardReports.filter(r => r.hazard_type === type).length})
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-3 italic">
+                    Stay alert and check the map above for exact locations
+                  </p>
+                </div>
               </div>
-              <p className="text-sm text-foreground/80 mb-2">
-                {hazardReports.length} hazard{hazardReports.length !== 1 ? 's' : ''} reported in the area
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {Array.from(new Set(hazardReports.map(r => r.hazard_type))).map((type) => (
-                  <Badge key={type} variant="outline" className="text-xs">
-                    {type} ({hazardReports.filter(r => r.hazard_type === type).length})
-                  </Badge>
-                ))}
-              </div>
-            </Card>
+            </div>
           )}
         </>
       )}
