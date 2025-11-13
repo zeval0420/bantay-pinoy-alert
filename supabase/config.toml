@@ -1,1 +1,4 @@
 project_id = "gpgvmypozselasuprhtc"
+
+[functions.analyze-hazard]
+verify_jwt = false
