@@ -16,6 +16,10 @@ interface HazardReport {
   location_name: string | null;
   created_at: string;
   status: string;
+  image_url: string;
+  fix_image_url: string | null;
+  fix_notes: string | null;
+  fixed_at: string | null;
 }
 
 // Vigan, Ilocos Sur coordinates
@@ -98,12 +102,14 @@ const LeafletMap = ({
   selectedRoute,
   hazardReports,
   currentLocation,
-  evacuationRoutes
+  evacuationRoutes,
+  onHazardClick
 }: { 
   selectedRoute: string | null;
   hazardReports: HazardReport[];
   currentLocation: [number, number];
   evacuationRoutes: typeof evacuationRouteWaypoints;
+  onHazardClick: (report: HazardReport) => void;
 }) => {
   const mapRef = useRef<any>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -185,32 +191,20 @@ const LeafletMap = ({
 
         // Add hazard report markers
         hazardReports.forEach((report) => {
+          const isResolved = report.status === 'fixed';
           const hazardIcon = L.divIcon({
             className: 'custom-hazard-icon',
-            html: `<div style="background-color: #DC2626; color: white; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">!</div>`,
+            html: `<div style="background-color: ${isResolved ? '#10B981' : '#DC2626'}; color: white; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3); cursor: pointer;">${isResolved ? '✓' : '!'}</div>`,
             iconSize: [32, 32],
             iconAnchor: [16, 16],
           });
 
           const marker = L.marker([report.latitude, report.longitude], { icon: hazardIcon })
-            .addTo(mapInstance)
-            .bindPopup(`
-              <div class="text-sm max-w-xs">
-                <p class="font-bold text-base mb-1">${report.hazard_type}</p>
-                <p class="text-xs text-gray-600 mb-2">${report.description}</p>
-                <p class="text-xs text-gray-500 mb-1">
-                  <strong>Location:</strong> ${report.location_name || 'Unknown'}
-                </p>
-                <p class="text-xs text-gray-500">
-                  <strong>Reported:</strong> ${new Date(report.created_at).toLocaleString()}
-                </p>
-                <span class="inline-block mt-2 px-2 py-1 text-xs rounded ${
-                  report.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                  report.status === 'verified' ? 'bg-green-100 text-green-800' :
-                  'bg-gray-100 text-gray-800'
-                }">${report.status}</span>
-              </div>
-            `);
+            .addTo(mapInstance);
+          
+          marker.on('click', () => {
+            onHazardClick(report);
+          });
 
           hazardMarkers.current.push(marker);
         });
@@ -233,7 +227,7 @@ const LeafletMap = ({
       mapInstance.remove();
     }
   };
-}, [hazardReports, currentLocation, evacuationRoutes]);
+}, [hazardReports, currentLocation, evacuationRoutes, onHazardClick]);
 
   // Handle route highlighting
   useEffect(() => {
@@ -271,6 +265,7 @@ export const MapView = () => {
   const [loading, setLoading] = useState(true);
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [selectedHazard, setSelectedHazard] = useState<HazardReport | null>(null);
 
   // Get user's current location
   useEffect(() => {
@@ -368,8 +363,75 @@ export const MapView = () => {
               hazardReports={hazardReports}
               currentLocation={currentLocation}
               evacuationRoutes={currentEvacuationRoutes}
+              onHazardClick={setSelectedHazard}
             />
           </div>
+
+          {selectedHazard && (
+            <Card className="p-4 border-2 border-primary">
+              <div className="flex justify-between items-start mb-3">
+                <h3 className="font-bold text-lg text-foreground">Hazard Report Details</h3>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setSelectedHazard(null)}
+                  className="h-6 w-6 p-0"
+                >
+                  ✕
+                </Button>
+              </div>
+              
+              <div className="space-y-3">
+                <div>
+                  <Badge className={cn(
+                    "mb-2",
+                    selectedHazard.status === 'fixed' 
+                      ? "bg-success/20 text-success-foreground border-success" 
+                      : "bg-warning/20 text-warning-foreground border-warning"
+                  )}>
+                    {selectedHazard.status === 'fixed' ? '✓ Resolved' : '⚠ Pending'}
+                  </Badge>
+                  <p className="font-semibold text-base text-foreground">{selectedHazard.hazard_type}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{selectedHazard.description}</p>
+                </div>
+
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p><strong>Location:</strong> {selectedHazard.location_name || 'Unknown'}</p>
+                  <p><strong>Reported:</strong> {new Date(selectedHazard.created_at).toLocaleString()}</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-foreground mb-2">Original Report</p>
+                    <img 
+                      src={selectedHazard.image_url} 
+                      alt="Hazard report" 
+                      className="w-full rounded-lg border border-border object-cover max-h-48"
+                    />
+                  </div>
+
+                  {selectedHazard.status === 'fixed' && selectedHazard.fix_image_url && (
+                    <div>
+                      <p className="text-xs font-semibold text-success mb-2">Resolution Photo</p>
+                      <img 
+                        src={selectedHazard.fix_image_url} 
+                        alt="Fixed hazard" 
+                        className="w-full rounded-lg border border-success object-cover max-h-48"
+                      />
+                      {selectedHazard.fix_notes && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          <strong>Notes:</strong> {selectedHazard.fix_notes}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        <strong>Fixed:</strong> {new Date(selectedHazard.fixed_at!).toLocaleString()}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
+          )}
 
           {hazardReports.length > 0 && (
             <div className="bg-gradient-to-r from-warning/20 via-warning/10 to-warning/20 border-l-4 border-warning rounded-lg p-4 shadow-lg">
