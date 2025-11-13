@@ -53,20 +53,12 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are a hazard classification AI for the Philippines emergency alert system. Analyze images and classify hazards into these categories:
-- Flooding
-- Landslide
-- Road Damage
-- Fallen Tree
-- Power Line Down
-- Structural Damage
-- Fire Hazard
-- Debris/Obstruction
-- Other
+            content: `You are a hazard classification AI for the Philippines emergency alert system. Analyze images and classify hazards.
 
 Provide a JSON response with:
 {
-  "hazard_type": "category name",
+  "name": "specific name of damage (e.g., 'Fallen Acacia Tree', 'Deep Pothole', 'Collapsed Wall')",
+  "hazard_type": "broad category - choose from: Obstruction, Slip Hazard, Structural Damage, Fire Hazard, Flooding, Other",
   "description": "detailed description of the hazard, severity, and safety concerns (2-3 sentences)",
   "severity": "low|medium|high|critical"
 }`

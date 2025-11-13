@@ -11,6 +11,7 @@ import { useHazardNotifications } from "@/hooks/useHazardNotifications";
 
 interface HazardReport {
   id: string;
+  name: string | null;
   hazard_type: string;
   description: string;
   latitude: number;
@@ -560,7 +561,8 @@ export const MapView = () => {
                   )}>
                     {selectedHazard.status === 'fixed' ? '✓ Resolved' : '⚠ Pending'}
                   </Badge>
-                  <p className="font-semibold text-base text-foreground">{selectedHazard.hazard_type}</p>
+                  <p className="font-bold text-lg text-foreground">{selectedHazard.name || selectedHazard.hazard_type}</p>
+                  <p className="text-sm text-muted-foreground font-medium">Type: {selectedHazard.hazard_type}</p>
                   <p className="text-sm text-muted-foreground mt-1">{selectedHazard.description}</p>
                 </div>
 

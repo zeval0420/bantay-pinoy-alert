@@ -15,6 +15,7 @@ export const HazardReport = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [name, setName] = useState("");
   const [hazardType, setHazardType] = useState("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState({ lat: 0, lng: 0, name: "" });
@@ -36,6 +37,9 @@ export const HazardReport = () => {
         setSelectedImage(reader.result as string);
       };
       reader.readAsDataURL(file);
+
+      // Auto-request location
+      getLocation();
 
       // Auto-analyze the image
       await analyzeImage(file);
@@ -61,8 +65,9 @@ export const HazardReport = () => {
 
         if (error) throw error;
 
-        setHazardType(data.hazard_type);
-        setDescription(data.description);
+        setName(data.name || "");
+        setHazardType(data.hazard_type || "");
+        setDescription(data.description || "");
         toast.success("Image analyzed successfully!");
       };
       reader.readAsDataURL(file);
@@ -114,6 +119,7 @@ export const HazardReport = () => {
     try {
       // Validate form data
       const validated = hazardReportSchema.parse({
+        name,
         hazard_type: hazardType,
         description: description,
         latitude: location.lat,
@@ -154,6 +160,7 @@ export const HazardReport = () => {
         .insert({
           user_id: user?.id || null,
           image_url: publicUrl,
+          name: validated.name,
           hazard_type: validated.hazard_type,
           description: validated.description,
           latitude: validated.latitude,
@@ -168,6 +175,7 @@ export const HazardReport = () => {
       // Reset form
       setSelectedImage(null);
       setImageFile(null);
+      setName("");
       setHazardType("");
       setDescription("");
       setLocation({ lat: 0, lng: 0, name: "" });
@@ -267,15 +275,34 @@ export const HazardReport = () => {
             </div>
           </div>
 
+          {/* Hazard Name Section */}
+          <div className="space-y-2">
+            <Label htmlFor="name">Hazard Name</Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., Fallen Acacia Tree, Deep Pothole"
+            />
+          </div>
+
           {/* Hazard Type Section */}
           <div className="space-y-2">
-            <Label htmlFor="hazard-type">Hazard Type</Label>
-            <Input
+            <Label htmlFor="hazard-type">Hazard Type (Category)</Label>
+            <select
               id="hazard-type"
               value={hazardType}
               onChange={(e) => setHazardType(e.target.value)}
-              placeholder="AI will classify the hazard"
-            />
+              className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="">Select hazard type...</option>
+              <option value="Obstruction">Obstruction</option>
+              <option value="Slip Hazard">Slip Hazard</option>
+              <option value="Structural Damage">Structural Damage</option>
+              <option value="Fire Hazard">Fire Hazard</option>
+              <option value="Flooding">Flooding</option>
+              <option value="Other">Other</option>
+            </select>
           </div>
 
           {/* Description Section */}
@@ -294,7 +321,7 @@ export const HazardReport = () => {
           <Button
             className="w-full"
             onClick={handleSubmit}
-            disabled={!imageFile || !hazardType || !description || !location.lat || submitting}
+            disabled={!imageFile || !name || !hazardType || !description || !location.lat || submitting}
           >
             {submitting ? (
               <>
