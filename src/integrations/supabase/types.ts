@@ -14,7 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      hazard_reports: {
+        Row: {
+          created_at: string
+          description: string
+          hazard_type: string
+          id: string
+          image_url: string
+          latitude: number
+          location_name: string | null
+          longitude: number
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          hazard_type: string
+          id?: string
+          image_url: string
+          latitude: number
+          location_name?: string | null
+          longitude: number
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          hazard_type?: string
+          id?: string
+          image_url?: string
+          latitude?: number
+          location_name?: string | null
+          longitude?: number
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

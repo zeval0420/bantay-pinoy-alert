@@ -1,4 +1,4 @@
-import { Home, Map, CheckSquare, Phone } from "lucide-react";
+import { Home, Map, CheckSquare, Phone, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface BottomNavProps {
@@ -9,6 +9,7 @@ interface BottomNavProps {
 const tabs = [
   { id: 'alerts', label: 'Alerts', icon: Home },
   { id: 'map', label: 'Map', icon: Map },
+  { id: 'report', label: 'Report', icon: AlertCircle },
   { id: 'checklist', label: 'Checklist', icon: CheckSquare },
   { id: 'contacts', label: 'Contacts', icon: Phone },
 ];

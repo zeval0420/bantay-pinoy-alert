@@ -6,6 +6,7 @@ import { MapView } from "@/components/MapView";
 import { Checklist } from "@/components/Checklist";
 import { EmergencyContacts } from "@/components/EmergencyContacts";
 import { NotificationDrawer } from "@/components/NotificationDrawer";
+import { HazardReport } from "@/components/HazardReport";
 import { Alert } from "@/types/alert";
 import { AlertCircle, Bell } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -160,6 +161,7 @@ const Index = () => {
         )}
 
         {activeTab === 'map' && <MapView />}
+        {activeTab === 'report' && <HazardReport />}
         {activeTab === 'checklist' && <Checklist />}
         {activeTab === 'contacts' && <EmergencyContacts />}
       </main>
