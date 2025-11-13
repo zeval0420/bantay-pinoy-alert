@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -329,12 +329,16 @@ export const MapView = () => {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [selectedHazard, setSelectedHazard] = useState<HazardReport | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const hasInitialized = useRef(false);
 
   // Enable hazard notifications
   useHazardNotifications(currentLocation, notificationsEnabled);
 
-  // Get user's current location
+  // Get user's current location (only once on mount)
   useEffect(() => {
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -353,7 +357,26 @@ export const MapView = () => {
     }
   }, []);
 
-  // Fetch hazard reports
+  // Memoize fetch function to prevent unnecessary re-renders
+  const fetchHazardReports = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('hazard_reports')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setHazardReports(data || []);
+    } catch (error) {
+      console.error('Error fetching hazard reports:', error);
+      toast.error('Failed to load hazard reports');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch hazard reports only on mount
   useEffect(() => {
     fetchHazardReports();
 
@@ -376,40 +399,38 @@ export const MapView = () => {
     return () => {
       supabase.removeChannel(channel);
     };
+  }, [fetchHazardReports]);
+
+  const handleRouteClick = useCallback((routeId: string) => {
+    setSelectedRoute(prev => prev === routeId ? null : routeId);
   }, []);
 
-  const fetchHazardReports = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('hazard_reports')
-        .select('*')
-        .order('created_at', { ascending: false });
+  const handleHazardClick = useCallback((report: HazardReport) => {
+    setSelectedHazard(report);
+  }, []);
 
-      if (error) throw error;
+  // Memoize evacuation routes to prevent recalculation
+  const currentEvacuationRoutes = useMemo(() => 
+    currentLocation ? evacuationRouteWaypoints.map(route => ({
+      ...route,
+      waypoints: [currentLocation, route.waypoints[1]] as [number, number][]
+    })) : evacuationRouteWaypoints,
+    [currentLocation]
+  );
 
-      setHazardReports(data || []);
-    } catch (error) {
-      console.error('Error fetching hazard reports:', error);
-      toast.error('Failed to load hazard reports');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Memoize safety scores to prevent recalculation
+  const routeSafetyScores = useMemo(() => {
+    const scores: Record<string, number> = {};
+    currentEvacuationRoutes.forEach(route => {
+      scores[route.id] = 100; // Default safety score
+    });
+    return scores;
+  }, [currentEvacuationRoutes]);
 
-  const handleRouteClick = (routeId: string) => {
-    setSelectedRoute(selectedRoute === routeId ? null : routeId);
-  };
-
-  // Calculate routes from current location
-  const currentEvacuationRoutes = currentLocation ? evacuationRouteWaypoints.map(route => ({
-    ...route,
-    waypoints: [currentLocation, route.waypoints[1]] as [number, number][]
-  })) : evacuationRouteWaypoints;
-
-  // Calculate safety scores for each route
-  const [routeSafetyScores, setRouteSafetyScores] = useState<Record<string, number>>({});
-
+  // Calculate safety scores only when hazards change
   useEffect(() => {
+    if (!currentLocation) return;
+
     const calculateSafety = async () => {
       const scores: Record<string, number> = {};
       
@@ -418,13 +439,18 @@ export const MapView = () => {
         scores[route.id] = calculateRouteSafety(roadCoordinates, hazardReports);
       }
       
-      setRouteSafetyScores(scores);
+      // Only update if scores have changed
+      const hasChanged = Object.keys(scores).some(
+        key => routeSafetyScores[key] !== scores[key]
+      );
+      
+      if (hasChanged) {
+        Object.assign(routeSafetyScores, scores);
+      }
     };
 
-    if (currentLocation && hazardReports.length >= 0) {
-      calculateSafety();
-    }
-  }, [currentLocation, hazardReports, currentEvacuationRoutes]);
+    calculateSafety();
+  }, [hazardReports.length]); // Only recalculate when hazard count changes
 
   // Calculate nearby safe zones based on current location
   const nearbySafeZones = useMemo(() => {
@@ -504,7 +530,7 @@ export const MapView = () => {
               hazardReports={hazardReports}
               currentLocation={currentLocation}
               evacuationRoutes={currentEvacuationRoutes}
-              onHazardClick={setSelectedHazard}
+              onHazardClick={handleHazardClick}
               nearbySafeZones={nearbySafeZones}
               routeSafetyScores={routeSafetyScores}
             />

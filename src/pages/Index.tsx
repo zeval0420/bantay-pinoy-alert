@@ -221,7 +221,7 @@ const Index = () => {
           </div>
         )}
 
-        {activeTab === 'map' && <MapView />}
+        {activeTab === 'map' && <MapView key="map-view" />}
         {activeTab === 'report' && <HazardReport />}
         {activeTab === 'checklist' && <Checklist />}
         {activeTab === 'contacts' && <EmergencyContacts />}
