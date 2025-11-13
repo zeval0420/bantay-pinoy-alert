@@ -5,6 +5,7 @@ import { calculateDistance } from '@/lib/geolocation';
 
 interface HazardReport {
   id: string;
+  name: string | null;
   hazard_type: string;
   description: string;
   latitude: number;
@@ -54,7 +55,7 @@ export const useHazardNotifications = (
             toast.warning(
               `New hazard reported ${distance.toFixed(1)}km from your location`,
               {
-                description: `${newHazard.hazard_type}: ${newHazard.description.substring(0, 100)}${newHazard.description.length > 100 ? '...' : ''}`,
+                description: `${newHazard.name || newHazard.hazard_type} - ${newHazard.description.substring(0, 80)}${newHazard.description.length > 80 ? '...' : ''}`,
                 duration: 8000,
               }
             );

@@ -10,6 +10,7 @@ import { toast } from "sonner";
 
 interface HazardReport {
   id: string;
+  name: string | null;
   hazard_type: string;
   description: string;
   location_name: string | null;
@@ -179,6 +180,7 @@ const AdminPanel = () => {
                   alt="Hazard"
                   className="w-full h-48 object-cover rounded-lg mb-2"
                 />
+                <p className="text-sm"><strong>Name:</strong> {selectedReport.name || 'N/A'}</p>
                 <p className="text-sm"><strong>Type:</strong> {selectedReport.hazard_type}</p>
                 <p className="text-sm"><strong>Description:</strong> {selectedReport.description}</p>
                 <p className="text-sm flex items-center gap-1">
@@ -298,11 +300,12 @@ const AdminPanel = () => {
                   />
                   <div className="flex-1">
                     <div className="flex items-start justify-between mb-1">
-                      <h3 className="font-semibold text-sm">{report.hazard_type}</h3>
+                      <h3 className="font-semibold text-sm">{report.name || report.hazard_type}</h3>
                       <Badge variant={report.status === 'resolved' ? 'default' : 'secondary'}>
                         {report.status}
                       </Badge>
                     </div>
+                    <p className="text-xs text-muted-foreground mb-1">Type: {report.hazard_type}</p>
                     <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
                       {report.description}
                     </p>
