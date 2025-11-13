@@ -1,11 +1,13 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Navigation, AlertTriangle } from "lucide-react";
+import { MapPin, Navigation, AlertTriangle, Bell, BellOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { calculateDistance, formatDistance } from "@/lib/geolocation";
+import { useHazardNotifications } from "@/hooks/useHazardNotifications";
 
 interface HazardReport {
   id: string;
@@ -25,11 +27,18 @@ interface HazardReport {
 // Vigan, Ilocos Sur coordinates
 const VIGAN_CENTER: [number, number] = [17.5747, 120.3869];
 
-// Safe zones in Vigan area
-const safeZones = [
-  { name: "Vigan City Hall", position: [17.5741, 120.3868] as [number, number], distance: "0.5 km" },
-  { name: "Vigan Convention Center", position: [17.5720, 120.3890] as [number, number], distance: "1.2 km" },
-  { name: "Bantay Church", position: [17.5920, 120.3890] as [number, number], distance: "2.8 km" },
+// Comprehensive list of safe zones in Vigan and surrounding areas
+const ALL_SAFE_ZONES = [
+  { name: "Vigan City Hall", position: [17.5741, 120.3868] as [number, number] },
+  { name: "Vigan Convention Center", position: [17.5720, 120.3890] as [number, number] },
+  { name: "Bantay Church", position: [17.5920, 120.3890] as [number, number] },
+  { name: "Plaza Salcedo", position: [17.5745, 120.3875] as [number, number] },
+  { name: "Vigan Cathedral", position: [17.5750, 120.3870] as [number, number] },
+  { name: "Bantay Bell Tower", position: [17.5925, 120.3895] as [number, number] },
+  { name: "Mindoro Beach", position: [17.5450, 120.3650] as [number, number] },
+  { name: "Vigan Sports Complex", position: [17.5780, 120.3920] as [number, number] },
+  { name: "Santo Domingo Church", position: [17.5735, 120.3860] as [number, number] },
+  { name: "Vigan Public Market", position: [17.5738, 120.3882] as [number, number] },
 ];
 
 // Evacuation route definitions (waypoints)
@@ -103,13 +112,15 @@ const LeafletMap = ({
   hazardReports,
   currentLocation,
   evacuationRoutes,
-  onHazardClick
+  onHazardClick,
+  nearbySafeZones
 }: { 
   selectedRoute: string | null;
   hazardReports: HazardReport[];
   currentLocation: [number, number];
   evacuationRoutes: typeof evacuationRouteWaypoints;
   onHazardClick: (report: HazardReport) => void;
+  nearbySafeZones: Array<{ name: string; position: [number, number]; distance: number }>;
 }) => {
   const mapRef = useRef<any>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -164,11 +175,11 @@ const LeafletMap = ({
           radius: dangerZone.radius
         }).addTo(mapInstance).bindPopup('<div class="text-sm"><p class="font-bold">Danger Zone</p><p>Flooding reported in this area</p></div>');
 
-        // Add safe zone markers
-        safeZones.forEach((zone) => {
+        // Add safe zone markers (only nearby ones)
+        nearbySafeZones.forEach((zone) => {
           L.marker(zone.position)
             .addTo(mapInstance)
-            .bindPopup(`<div class="text-sm"><p class="font-bold">${zone.name}</p><p class="text-xs">Safe Zone - ${zone.distance}</p></div>`);
+            .bindPopup(`<div class="text-sm"><p class="font-bold">${zone.name}</p><p class="text-xs">Safe Zone - ${formatDistance(zone.distance)}</p></div>`);
         });
 
         // Add evacuation routes with real road-based routing
@@ -227,7 +238,7 @@ const LeafletMap = ({
       mapInstance.remove();
     }
   };
-}, [hazardReports, currentLocation, evacuationRoutes, onHazardClick]);
+}, [hazardReports, currentLocation, evacuationRoutes, onHazardClick, nearbySafeZones]);
 
   // Handle route highlighting
   useEffect(() => {
@@ -266,6 +277,10 @@ export const MapView = () => {
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [selectedHazard, setSelectedHazard] = useState<HazardReport | null>(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
+  // Enable hazard notifications
+  useHazardNotifications(currentLocation, notificationsEnabled);
 
   // Get user's current location
   useEffect(() => {
@@ -340,6 +355,27 @@ export const MapView = () => {
     waypoints: [currentLocation, route.waypoints[1]] as [number, number][]
   })) : evacuationRouteWaypoints;
 
+  // Calculate nearby safe zones based on current location
+  const nearbySafeZones = useMemo(() => {
+    if (!currentLocation) return [];
+    
+    const [userLat, userLon] = currentLocation;
+    const zonesWithDistance = ALL_SAFE_ZONES.map(zone => {
+      const distance = calculateDistance(
+        userLat,
+        userLon,
+        zone.position[0],
+        zone.position[1]
+      );
+      return { ...zone, distance };
+    });
+
+    // Sort by distance and take the 5 nearest
+    return zonesWithDistance
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 5);
+  }, [currentLocation]);
+
   return (
     <div className="space-y-4">
       {locationError && (
@@ -347,6 +383,40 @@ export const MapView = () => {
           <p className="text-sm text-foreground">{locationError}</p>
         </div>
       )}
+
+      <Card className="p-4 bg-primary/5 border-primary/20">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {notificationsEnabled ? (
+              <Bell className="w-5 h-5 text-primary" />
+            ) : (
+              <BellOff className="w-5 h-5 text-muted-foreground" />
+            )}
+            <div>
+              <h3 className="font-bold text-sm text-foreground">Hazard Alerts</h3>
+              <p className="text-xs text-muted-foreground">
+                {notificationsEnabled 
+                  ? 'Receiving alerts for hazards within 5km' 
+                  : 'Notifications disabled'}
+              </p>
+            </div>
+          </div>
+          <Button
+            variant={notificationsEnabled ? "default" : "outline"}
+            size="sm"
+            onClick={() => {
+              setNotificationsEnabled(!notificationsEnabled);
+              toast.info(
+                notificationsEnabled 
+                  ? 'Hazard notifications disabled' 
+                  : 'Hazard notifications enabled'
+              );
+            }}
+          >
+            {notificationsEnabled ? 'Disable' : 'Enable'}
+          </Button>
+        </div>
+      </Card>
       
       {loading || !currentLocation ? (
         <Card className="p-8">
@@ -364,6 +434,7 @@ export const MapView = () => {
               currentLocation={currentLocation}
               evacuationRoutes={currentEvacuationRoutes}
               onHazardClick={setSelectedHazard}
+              nearbySafeZones={nearbySafeZones}
             />
           </div>
 
@@ -511,14 +582,22 @@ export const MapView = () => {
       <Card className="p-4">
         <h3 className="font-bold mb-3 text-foreground flex items-center gap-2">
           <MapPin className="w-5 h-5 text-success" />
-          Safe Zones in Vigan Area
+          Nearest Safe Zones
         </h3>
+        <p className="text-xs text-muted-foreground mb-3">
+          Showing 5 closest safe zones to your location
+        </p>
         <div className="space-y-2">
-          {safeZones.map((zone, index) => (
-            <div key={index} className="flex items-center justify-between">
-              <span className="text-sm text-foreground/90">{zone.name}</span>
+          {nearbySafeZones.map((zone, index) => (
+            <div key={index} className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-primary bg-primary/10 w-6 h-6 rounded-full flex items-center justify-center">
+                  {index + 1}
+                </span>
+                <span className="text-sm text-foreground/90">{zone.name}</span>
+              </div>
               <Badge variant="outline" className="text-xs">
-                {zone.distance}
+                {formatDistance(zone.distance)}
               </Badge>
             </div>
           ))}
