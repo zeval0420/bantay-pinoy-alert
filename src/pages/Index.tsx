@@ -19,13 +19,13 @@ import { useNavigate } from "react-router-dom";
 const sampleAlerts: Alert[] = [
   {
     id: '1',
-    title: 'Typhoon Uwan Approaching Metro Manila',
+    title: 'Typhoon Uwan Approaching Pangasinan',
     severity: 'critical',
     type: 'typhoon',
-    description: 'Super Typhoon Uwan is expected to make landfall in Metro Manila within 12 hours. Wind speeds reaching 220 km/h with heavy rainfall expected.',
+    description: 'Super Typhoon Uwan is expected to make landfall in Pangasinan within 12 hours. Wind speeds reaching 220 km/h with heavy rainfall expected.',
     location: 'Urdaneta City, Pangasinan',
     time: new Date(),
-    safeZones: ['Quezon City Hall Evacuation Center', 'Marikina Sports Complex', 'Manila City Gym'],
+    safeZones: ['Urdaneta City Hall Evacuation Center', 'Urdaneta City Cultural Center'],
     instructions: [
       'Evacuate to the nearest designated safe zone immediately',
       'Secure all loose items outdoors',
