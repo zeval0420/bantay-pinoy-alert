@@ -22,7 +22,7 @@ const sampleAlerts: Alert[] = [
     title: 'Typhoon Nina Approaching Metro Manila',
     severity: 'critical',
     type: 'typhoon',
-    description: 'Super Typhoon Nina is expected to make landfall in Metro Manila within 12 hours. Wind speeds reaching 220 km/h with heavy rainfall expected.',
+    description: 'Super Typhoon Uwan is expected to make landfall in Metro Manila within 12 hours. Wind speeds reaching 220 km/h with heavy rainfall expected.',
     location: 'Metro Manila, NCR',
     time: new Date(),
     safeZones: ['Quezon City Hall Evacuation Center', 'Marikina Sports Complex', 'Manila City Gym'],
