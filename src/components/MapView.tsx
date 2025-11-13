@@ -84,6 +84,53 @@ const dangerZone = {
   radius: 2000, // meters
 };
 
+// Helper function to check if a point is near any hazards
+const isNearHazard = (
+  point: [number, number],
+  hazards: HazardReport[],
+  radiusKm: number = 0.5
+): boolean => {
+  return hazards.some(hazard => {
+    if (hazard.status === 'fixed') return false; // Ignore resolved hazards
+    const distance = calculateDistance(
+      point[0],
+      point[1],
+      hazard.latitude,
+      hazard.longitude
+    );
+    return distance <= radiusKm;
+  });
+};
+
+// Helper function to calculate route safety score (0-100, higher is safer)
+const calculateRouteSafety = (
+  routeCoordinates: [number, number][],
+  hazards: HazardReport[]
+): number => {
+  if (hazards.length === 0) return 100;
+  
+  let hazardProximityScore = 0;
+  const samplePoints = routeCoordinates.filter((_, idx) => idx % 5 === 0); // Sample every 5th point
+  
+  samplePoints.forEach(point => {
+    hazards.forEach(hazard => {
+      if (hazard.status === 'fixed') return;
+      const distance = calculateDistance(
+        point[0],
+        point[1],
+        hazard.latitude,
+        hazard.longitude
+      );
+      // Closer hazards have more impact
+      if (distance < 0.5) hazardProximityScore += 10;
+      else if (distance < 1) hazardProximityScore += 5;
+      else if (distance < 2) hazardProximityScore += 2;
+    });
+  });
+  
+  return Math.max(0, 100 - hazardProximityScore);
+};
+
 // Helper function to fetch route from OSRM
 const fetchRoute = async (waypoints: [number, number][]) => {
   try {
@@ -113,7 +160,8 @@ const LeafletMap = ({
   currentLocation,
   evacuationRoutes,
   onHazardClick,
-  nearbySafeZones
+  nearbySafeZones,
+  routeSafetyScores
 }: { 
   selectedRoute: string | null;
   hazardReports: HazardReport[];
@@ -121,6 +169,7 @@ const LeafletMap = ({
   evacuationRoutes: typeof evacuationRouteWaypoints;
   onHazardClick: (report: HazardReport) => void;
   nearbySafeZones: Array<{ name: string; position: [number, number]; distance: number }>;
+  routeSafetyScores: Record<string, number>;
 }) => {
   const mapRef = useRef<any>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -182,9 +231,11 @@ const LeafletMap = ({
             .bindPopup(`<div class="text-sm"><p class="font-bold">${zone.name}</p><p class="text-xs">Safe Zone - ${formatDistance(zone.distance)}</p></div>`);
         });
 
-        // Add evacuation routes with real road-based routing
+        // Add evacuation routes with real road-based routing and safety info
         const routePromises = evacuationRoutes.map(async (route) => {
           const roadCoordinates = await fetchRoute(route.waypoints);
+          const safetyScore = routeSafetyScores[route.id] || 100;
+          const safetyText = safetyScore >= 80 ? '✓ Safe route' : safetyScore >= 50 ? '⚠ Caution - hazards nearby' : '⚠ High risk - hazards on route';
           
           const polyline = L.polyline(roadCoordinates, {
             color: route.color,
@@ -192,7 +243,7 @@ const LeafletMap = ({
             opacity: 0.7
           }).addTo(mapInstance);
           
-          polyline.bindPopup(`<div class="text-sm"><p class="font-bold">${route.name}</p><p class="text-xs">${route.description}</p></div>`);
+          polyline.bindPopup(`<div class="text-sm"><p class="font-bold">${route.name}</p><p class="text-xs">${route.description}</p><p class="text-xs mt-1"><strong>Safety Score:</strong> ${safetyScore}/100 - ${safetyText}</p></div>`);
           
           // Store polyline reference
           routeLayers.current[route.id] = { polyline, defaultColor: route.color };
@@ -238,7 +289,7 @@ const LeafletMap = ({
       mapInstance.remove();
     }
   };
-}, [hazardReports, currentLocation, evacuationRoutes, onHazardClick, nearbySafeZones]);
+}, [hazardReports, currentLocation, evacuationRoutes, onHazardClick, nearbySafeZones, routeSafetyScores]);
 
   // Handle route highlighting
   useEffect(() => {
@@ -355,6 +406,26 @@ export const MapView = () => {
     waypoints: [currentLocation, route.waypoints[1]] as [number, number][]
   })) : evacuationRouteWaypoints;
 
+  // Calculate safety scores for each route
+  const [routeSafetyScores, setRouteSafetyScores] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const calculateSafety = async () => {
+      const scores: Record<string, number> = {};
+      
+      for (const route of currentEvacuationRoutes) {
+        const roadCoordinates = await fetchRoute(route.waypoints);
+        scores[route.id] = calculateRouteSafety(roadCoordinates, hazardReports);
+      }
+      
+      setRouteSafetyScores(scores);
+    };
+
+    if (currentLocation && hazardReports.length >= 0) {
+      calculateSafety();
+    }
+  }, [currentLocation, hazardReports, currentEvacuationRoutes]);
+
   // Calculate nearby safe zones based on current location
   const nearbySafeZones = useMemo(() => {
     if (!currentLocation) return [];
@@ -435,6 +506,7 @@ export const MapView = () => {
               evacuationRoutes={currentEvacuationRoutes}
               onHazardClick={setSelectedHazard}
               nearbySafeZones={nearbySafeZones}
+              routeSafetyScores={routeSafetyScores}
             />
           </div>
 
@@ -544,28 +616,54 @@ export const MapView = () => {
           Click on a route to highlight it on the map
         </p>
         <div className="space-y-2">
-          {currentEvacuationRoutes.map((route) => (
-            <Button
-              key={route.id}
-              variant={selectedRoute === route.id ? "default" : "outline"}
-              className={cn(
-                "w-full justify-start text-left h-auto py-3",
-                selectedRoute === route.id && "bg-warning text-warning-foreground hover:bg-warning/90"
-              )}
-              onClick={() => handleRouteClick(route.id)}
-            >
-              <div className="flex items-start gap-3 w-full">
-                <div
-                  className="w-3 h-3 rounded-full mt-1 flex-shrink-0"
-                  style={{ backgroundColor: route.color }}
-                />
-                <div className="flex-1">
-                  <p className="font-semibold text-sm">{route.name}</p>
-                  <p className="text-xs opacity-80">{route.description}</p>
+          {currentEvacuationRoutes.map((route) => {
+            const safetyScore = routeSafetyScores[route.id] || 100;
+            const isSafest = Object.entries(routeSafetyScores).every(([id, score]) => 
+              id === route.id || score <= safetyScore
+            );
+            
+            return (
+              <Button
+                key={route.id}
+                variant={selectedRoute === route.id ? "default" : "outline"}
+                className={cn(
+                  "w-full justify-start text-left h-auto py-3",
+                  selectedRoute === route.id && "bg-warning text-warning-foreground hover:bg-warning/90"
+                )}
+                onClick={() => handleRouteClick(route.id)}
+              >
+                <div className="flex items-start gap-3 w-full">
+                  <div
+                    className="w-3 h-3 rounded-full mt-1 flex-shrink-0"
+                    style={{ backgroundColor: route.color }}
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-sm">{route.name}</p>
+                      {isSafest && safetyScore >= 80 && (
+                        <Badge variant="outline" className="text-xs bg-success/10 text-success border-success">
+                          Safest
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs opacity-80">{route.description}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="flex-1 bg-muted rounded-full h-1.5">
+                        <div 
+                          className={cn(
+                            "h-1.5 rounded-full transition-all",
+                            safetyScore >= 80 ? "bg-success" : safetyScore >= 50 ? "bg-warning" : "bg-critical"
+                          )}
+                          style={{ width: `${safetyScore}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-medium">{safetyScore}/100</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </Button>
-          ))}
+              </Button>
+            );
+          })}
         </div>
       </Card>
 
