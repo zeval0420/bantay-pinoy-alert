@@ -96,10 +96,14 @@ const fetchRoute = async (waypoints: [number, number][]) => {
 // Leaflet Map Component
 const LeafletMap = ({ 
   selectedRoute,
-  hazardReports 
+  hazardReports,
+  currentLocation,
+  evacuationRoutes
 }: { 
   selectedRoute: string | null;
   hazardReports: HazardReport[];
+  currentLocation: [number, number];
+  evacuationRoutes: typeof evacuationRouteWaypoints;
 }) => {
   const mapRef = useRef<any>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -124,8 +128,22 @@ const LeafletMap = ({
         });
 
         // Create map
-        mapInstance = L.map('map').setView(VIGAN_CENTER, 13);
+        mapInstance = L.map('map').setView(currentLocation, 13);
         mapRef.current = mapInstance;
+
+        // Add current location marker
+        const currentLocationIcon = L.divIcon({
+          className: 'current-location-icon',
+          html: `<div style="background-color: #3B82F6; color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+            <div style="width: 8px; height: 8px; background-color: white; border-radius: 50%;"></div>
+          </div>`,
+          iconSize: [20, 20],
+          iconAnchor: [10, 10],
+        });
+
+        L.marker(currentLocation, { icon: currentLocationIcon })
+          .addTo(mapInstance)
+          .bindPopup('<div class="text-sm"><p class="font-bold">Your Location</p></div>');
 
         // Add tile layer
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -148,7 +166,7 @@ const LeafletMap = ({
         });
 
         // Add evacuation routes with real road-based routing
-        const routePromises = evacuationRouteWaypoints.map(async (route) => {
+        const routePromises = evacuationRoutes.map(async (route) => {
           const roadCoordinates = await fetchRoute(route.waypoints);
           
           const polyline = L.polyline(roadCoordinates, {
@@ -212,10 +230,10 @@ const LeafletMap = ({
       hazardMarkers.current = [];
       
       if (mapInstance) {
-        mapInstance.remove();
-      }
-    };
-  }, [hazardReports]);
+      mapInstance.remove();
+    }
+  };
+}, [hazardReports, currentLocation, evacuationRoutes]);
 
   // Handle route highlighting
   useEffect(() => {
@@ -251,6 +269,28 @@ export const MapView = () => {
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
   const [hazardReports, setHazardReports] = useState<HazardReport[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
+  // Get user's current location
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCurrentLocation([position.coords.latitude, position.coords.longitude]);
+          setLocationError(null);
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+          setLocationError('Unable to get your location. Using default location.');
+          setCurrentLocation(VIGAN_CENTER); // Fallback to Vigan center
+        }
+      );
+    } else {
+      setLocationError('Geolocation is not supported by your browser.');
+      setCurrentLocation(VIGAN_CENTER); // Fallback to Vigan center
+    }
+  }, []);
 
   // Fetch hazard reports
   useEffect(() => {
@@ -299,9 +339,21 @@ export const MapView = () => {
     setSelectedRoute(selectedRoute === routeId ? null : routeId);
   };
 
+  // Calculate routes from current location
+  const currentEvacuationRoutes = currentLocation ? evacuationRouteWaypoints.map(route => ({
+    ...route,
+    waypoints: [currentLocation, route.waypoints[1]] as [number, number][]
+  })) : evacuationRouteWaypoints;
+
   return (
     <div className="space-y-4">
-      {loading ? (
+      {locationError && (
+        <div className="bg-warning/20 border-l-4 border-warning rounded-lg p-3">
+          <p className="text-sm text-foreground">{locationError}</p>
+        </div>
+      )}
+      
+      {loading || !currentLocation ? (
         <Card className="p-8">
           <div className="flex items-center justify-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -311,7 +363,12 @@ export const MapView = () => {
       ) : (
         <>
           <div className="relative h-[400px] rounded-lg overflow-hidden border-2 border-border shadow-lg">
-            <LeafletMap selectedRoute={selectedRoute} hazardReports={hazardReports} />
+            <LeafletMap 
+              selectedRoute={selectedRoute} 
+              hazardReports={hazardReports}
+              currentLocation={currentLocation}
+              evacuationRoutes={currentEvacuationRoutes}
+            />
           </div>
 
           {hazardReports.length > 0 && (
@@ -354,7 +411,7 @@ export const MapView = () => {
           Click on a route to highlight it on the map
         </p>
         <div className="space-y-2">
-          {evacuationRouteWaypoints.map((route) => (
+          {currentEvacuationRoutes.map((route) => (
             <Button
               key={route.id}
               variant={selectedRoute === route.id ? "default" : "outline"}
